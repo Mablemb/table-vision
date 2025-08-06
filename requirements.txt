@@ -1,0 +1,14 @@
+# Core dependencies for Table Vision PDF table extraction tool
+camelot-py
+PyQt5
+PyMuPDF
+Pillow
+numpy
+pandas
+opencv-python
+matplotlib
+
+# Additional dependencies for computer vision features
+# Note: Install these separately if needed for advanced CV features
+# pdftopng==0.1.0  # Use available version instead of 0.2.3
+# ghostscript==0.7
