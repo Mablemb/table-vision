@@ -1,0 +1,1 @@
+Interactive PyQt5 PDF viewer with intelligent table extraction using Camelot. Features visual table boundary detection, coordinate mapping, and seamless export to CSV/Excel. Perfect for researchers and data analysts working with PDF documents containing tabular data.
