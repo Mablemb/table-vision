@@ -1,4 +1,60 @@
-# Fixed Issues Test Plan
+# Testing Guide
+
+## 🧪 Automated Testing with pytest
+
+Table Vision now includes a comprehensive automated testing suite using pytest for reliable validation of core functionality.
+
+### Test Infrastructure
+
+- **pytest 8.4.1**: Modern Python testing framework
+- **pytest-qt 4.5.0**: PyQt5-specific testing for GUI components
+- **pytest-cov 6.2.1**: Code coverage reporting integration
+- **15 automated tests**: Complete coverage of deletion and synchronization scenarios
+
+### Running Automated Tests
+
+**Install test dependencies (if not already installed):**
+```bash
+pip install pytest pytest-qt pytest-cov
+```
+
+**Run all automated tests:**
+```bash
+python -m pytest tests/ -v
+```
+
+**Run with code coverage:**
+```bash
+python -m pytest tests/ --cov=src --cov-report=html --cov-report=term-missing
+```
+
+**Run specific test files:**
+```bash
+# Deletion functionality tests
+python -m pytest tests/test_deletion_pytest.py -v
+
+# Synchronization tests  
+python -m pytest tests/test_synchronization_pytest.py -v
+
+# Batch processing tests
+python -m pytest tests/test_batch_accumulation.py -v
+```
+
+### Test Coverage Summary
+
+The automated tests validate:
+
+- ✅ **Basic coordinate deletion** - Removing single coordinates
+- ✅ **Multiple coordinate deletion** - Batch deletion operations
+- ✅ **Non-existent coordinate handling** - Graceful error handling
+- ✅ **User-created coordinate deletion** - Manual table deletion
+- ✅ **Data structure synchronization** - Internal consistency
+- ✅ **Real-time deletion during batch processing** - Critical fix verification
+- ✅ **Coordinate accumulation across pages** - Multi-page extraction
+- ✅ **ID consistency during operations** - Proper coordinate tracking
+- ✅ **User coordinate preservation** - Protecting manual additions
+
+## 🐛 Manual Testing for Bug Fixes
 
 ## Issues Fixed
 

@@ -94,7 +94,8 @@ This tool is perfect for:
 - **🔄 Improved Coordinate Management**: Fixed coordinate synchronization between internal data structures
 - **📊 Enhanced Batch Processing**: Batch extraction now properly accumulates coordinates without refreshing existing ones
 - **🎯 Consistent Behavior**: Unified deletion functionality across all extraction methods (regular and batch)
-- **🧪 Comprehensive Testing**: Added extensive test suite with 13+ automated tests covering all deletion scenarios
+- **🧪 Comprehensive Testing**: Added professional pytest testing infrastructure with 15 automated tests
+- **✅ Test Coverage**: Complete test coverage for deletion, synchronization, and batch processing scenarios
 - **🐛 Data Persistence**: Deleted coordinates no longer reappear due to coordinate list merging issues
 - **💻 Better User Experience**: Smooth, uninterrupted workflow for table review and curation during extraction
 
@@ -159,7 +160,12 @@ table-vision/
 │   │   ├── table_editor.py     # Table editing UI panel  
 │   │   └── settings_panel.py   # Configuration UI
 │   └── 🚀 app.py               # Application entry point
-├── 🧪 tests/                   # Comprehensive test suite
+├── 🧪 tests/                   # Comprehensive pytest test suite
+│   ├── test_deletion_pytest.py     # Core deletion functionality tests (5 tests)
+│   ├── test_synchronization_pytest.py  # Coordinate synchronization tests (5 tests)
+│   ├── test_batch_accumulation.py      # Batch processing scenario tests (5 tests)
+│   ├── pytest.ini                      # pytest configuration
+│   └── (legacy test files)             # Original unittest-based tests
 ├── 📝 examples/                # Usage examples and sample code
 ├── 🎛️ resources/               # Default settings and configuration
 └── 📋 requirements.txt         # Python dependencies
@@ -285,15 +291,70 @@ table-vision/
 
 ## 🧪 Testing
 
-Run the test suite:
+Table Vision includes a comprehensive testing infrastructure using pytest to ensure reliability and catch regressions.
+
+### Test Infrastructure
+
+The project uses **pytest** with specialized testing for PyQt5 GUI components:
+
+- **pytest 8.4.1**: Modern Python testing framework
+- **pytest-qt 4.5.0**: PyQt5-specific testing capabilities for GUI components  
+- **pytest-cov 6.2.1**: Code coverage reporting
+- **15 automated tests**: Covering all deletion and synchronization scenarios
+
+### Running Tests
+
+**Run all tests:**
 ```bash
-python -m pytest tests/
+python -m pytest tests/ -v
 ```
 
-Run with coverage:
+**Run with coverage:**
 ```bash
-python -m pytest tests/ --cov=src --cov-report=html
+python -m pytest tests/ --cov=src --cov-report=html --cov-report=term-missing
 ```
+
+**Run specific test categories:**
+```bash
+# GUI-related tests
+python -m pytest tests/ -m gui -v
+
+# Integration tests  
+python -m pytest tests/ -m integration -v
+```
+
+### Test Coverage
+
+Current test files cover critical functionality:
+
+- **`test_deletion_pytest.py`**: Core deletion functionality (5 tests)
+  - Basic coordinate deletion
+  - Multiple coordinate deletion
+  - Non-existent coordinate handling
+  - User-created coordinate deletion
+  - Data structure synchronization
+
+- **`test_synchronization_pytest.py`**: Coordinate synchronization (5 tests)
+  - Regular extraction synchronization
+  - Batch extraction synchronization
+  - Synchronization after deletion
+  - ID consistency during operations
+  - User coordinate preservation
+
+- **`test_batch_accumulation.py`**: Batch processing scenarios (5 tests)
+  - Page extraction completion
+  - Real-time deletion during batch processing
+  - Coordinate accumulation across pages
+  - Deletion after accumulation
+  - Batch completion synchronization
+
+### Manual Testing
+
+For comprehensive testing, see [TESTING_GUIDE.md](TESTING_GUIDE.md) which includes:
+- Step-by-step manual testing procedures
+- Visual verification workflows
+- PDF sample testing instructions
+- Debug mode activation for troubleshooting
 
 ## 🤝 Contributing
 

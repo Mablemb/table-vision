@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Real-time Deletion**: Deletion now works throughout batch extraction process, not just at the end
 - **UI Responsiveness**: Delete operations now properly update both viewer and editor displays
 
+### ✨ Added
+- **Comprehensive Testing Infrastructure**: Implemented pytest-based automated testing
+- **15 Automated Tests**: Complete test coverage for deletion, synchronization, and batch processing
+- **pytest Configuration**: Professional test setup with GUI testing support and coverage reporting
+- **Test Categories**: Organized tests by functionality (deletion, synchronization, batch accumulation)
+- **Code Coverage Reporting**: HTML and terminal coverage reports for development workflow
+- **Mock Testing Framework**: Isolated testing with proper PyQt5 GUI component mocking
+
 ### 🔧 Technical
 - Modified `delete_coordinate()` method to remove coordinates from both `coordinates_manager` and `all_extracted_coordinates`
 - Enhanced `on_page_extraction_completed()` to maintain both data structures incrementally during batch processing
@@ -23,8 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `on_extraction_finished()` to prevent duplicate coordinate storage
 - Added comprehensive debug logging for coordinate management operations
 - Streamlined coordinate management for consistency between extraction methods
-- Added comprehensive debug logging for coordinate deletion tracking
 - Enhanced coordinate synchronization between different data sources
+
+### 🧪 Testing
+- **pytest 8.4.1**: Modern Python testing framework with PyQt5 support
+- **pytest-qt 4.5.0**: Specialized GUI testing capabilities for PyQt5 components
+- **pytest-cov 6.2.1**: Code coverage reporting for development workflow
+- **3 Test Files**: `test_deletion_pytest.py`, `test_synchronization_pytest.py`, `test_batch_accumulation.py`
+- **Test Fixtures**: Proper PyQt5 application and main window fixtures for isolated testing
+- **Mock Components**: MockViewer and MockEditor for testing without full GUI initialization
+- **Configuration**: Professional pytest.ini setup with test discovery and coverage reporting
 
 ## [2.3.0] - 2025-08-07
 

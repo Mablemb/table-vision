@@ -11,7 +11,7 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from data.models import TableCoordinate, PDFDocument, TableExtractionSession
-from data.storage import SessionStorage
+from data.storage import StorageManager
 
 
 class TestTableCoordinate(unittest.TestCase):
@@ -185,15 +185,13 @@ class TestTableExtractionSession(unittest.TestCase):
         self.assertEqual(len(session.coordinates), 0)
 
 
-class TestSessionStorage(unittest.TestCase):
-    """Test cases for SessionStorage class."""
-
+class TestStorageManager(unittest.TestCase):
+    """Test cases for StorageManager class."""
+    
     def setUp(self):
-        """Set up test fixtures."""
-        # Create temporary directory for test storage
         self.temp_dir = tempfile.mkdtemp()
-        self.storage = SessionStorage(storage_dir=self.temp_dir)
-
+        self.storage = StorageManager(base_dir=self.temp_dir)
+    
     def tearDown(self):
         """Clean up after tests."""
         # Clean up temporary files
