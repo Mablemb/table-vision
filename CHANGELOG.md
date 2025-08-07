@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2025-08-07
+
+### 🎯 Fixed
+- **Critical Export Bug**: Fixed coordinate system mismatch between visualization and image export
+- **Aspect Ratio Issues**: Resolved landscape tables exporting as portrait images  
+- **Coordinate Transformation**: Export now uses same Y-axis flipping as visualization for perfect alignment
+- **PyMuPDF Clipping**: Fixed high-DPI clipping issues causing dimension swapping
+- **Image Cropping**: Export images now precisely match red rectangle positions
+
+### ✨ Added
+- **Full-page Render Approach**: New rendering method using full-page + PIL crop for better reliability
+- **Enhanced Debug Output**: Comprehensive coordinate transformation logging for troubleshooting
+- **Coordinate Validation**: Better bounds checking and error handling for invalid coordinates
+- **Aspect Ratio Detection**: Debug output now shows expected vs actual aspect ratios
+
+### 🔧 Technical
+- Replaced PyMuPDF clipping with full-page render + PIL crop to avoid dimension issues
+- Synchronized coordinate transformation between `viewer.py` and `renderer.py`
+- Added Y-axis flipping in renderer to match visualization coordinate system
+- Enhanced error handling for edge cases in coordinate transformation
+
+### 📊 Results
+- **Before**: Expected 1812×1743 landscape → Got 1871×2480 portrait (wrong orientation)
+- **After**: Expected 1812×1743 landscape → Got 1812×1743 landscape ✅ (perfect match)
+
+## [2.2.0] - 2025-08-06
+
+### ✨ Added
+- **Page Range Selection**: Extract tables from specific page ranges (start and end pages)
+- **Efficient Processing**: Process only selected pages instead of entire documents
+- **UI Controls**: Intuitive page range controls in toolbar with validation
+- **Progress Tracking**: Progress indicators show current page within selected range
+- **Better Testing**: Easy system testing with selective page processing
+
+### 🔧 Technical
+- `BatchExtractionWorkerCustom` class for page range processing
+- Page range validation and error handling
+- Enhanced progress reporting for selected ranges
+- Improved batch processing efficiency
+
 ## [2.1.0] - 2025-08-06
 
 ### 🐛 Fixed

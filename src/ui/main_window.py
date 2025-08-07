@@ -4,7 +4,8 @@ Main application window for Table Vision.
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                            QHBoxLayout, QPushButton, QFileDialog, QMessageBox,
                            QSplitter, QMenuBar, QMenu, QAction, QStatusBar,
-                           QProgressBar, QLabel, QToolBar, QSpinBox)
+                           QProgressBar, QLabel, QToolBar, QSpinBox, QLineEdit,
+                           QCheckBox, QGroupBox)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon, QKeySequence
 import sys
@@ -58,6 +59,127 @@ class ExtractionWorker(QThread):
             self.error.emit(f"Extraction error: {str(e)}")
 
 
+class BatchExtractionWorkerCustom(QThread):
+    """Custom batch extraction worker that supports page ranges."""
+    
+    # Signals
+    page_completed = pyqtSignal(int, list)  # page_number, coordinates
+    batch_completed = pyqtSignal(list)  # all_coordinates
+    progress_updated = pyqtSignal(int, int)  # current_page, total_pages
+    error_occurred = pyqtSignal(str)  # error_message
+    
+    def __init__(self, pdf_path: str, batch_size: int = 3, start_page: int = 1, end_page: int = None):
+        super().__init__()
+        self.pdf_path = pdf_path
+        self.batch_size = batch_size
+        self.start_page = start_page
+        self.end_page = end_page
+        self.should_stop = False
+        self.all_coordinates = []
+        
+    def run(self):
+        """Run batch extraction process for specified page range."""
+        try:
+            # Get total page count
+            import fitz
+            doc = fitz.open(self.pdf_path)
+            total_pages = len(doc)
+            doc.close()
+            
+            # Validate and set page range
+            if self.end_page is None or self.end_page > total_pages:
+                self.end_page = total_pages
+            
+            if self.start_page < 1:
+                self.start_page = 1
+                
+            if self.start_page > self.end_page:
+                self.error_occurred.emit(f"Invalid page range: start page ({self.start_page}) is greater than end page ({self.end_page})")
+                return
+            
+            current_page = self.start_page
+            pages_to_process = self.end_page - self.start_page + 1
+            
+            while current_page <= self.end_page and not self.should_stop:
+                # Calculate batch end page
+                batch_end = min(current_page + self.batch_size - 1, self.end_page)
+                pages_range = f"{current_page}-{batch_end}" if batch_end > current_page else str(current_page)
+                
+                try:
+                    import camelot
+                    # Extract tables for this batch
+                    tables = camelot.read_pdf(
+                        self.pdf_path,
+                        pages=pages_range,
+                        flavor='lattice',
+                        strip_text='\n'
+                    )
+                    
+                    # Process each page in the batch
+                    for page_num in range(current_page, batch_end + 1):
+                        if self.should_stop:
+                            break
+                            
+                        page_tables = [t for t in tables if t.page == page_num]
+                        page_coordinates = self._extract_coordinates_for_page(page_tables, page_num)
+                        
+                        self.all_coordinates.extend(page_coordinates)
+                        self.page_completed.emit(page_num, page_coordinates)
+                        
+                        # Calculate progress based on selected range
+                        processed_pages = page_num - self.start_page + 1
+                        self.progress_updated.emit(processed_pages, pages_to_process)
+                    
+                except Exception as e:
+                    self.error_occurred.emit(f"Error processing pages {pages_range}: {str(e)}")
+                
+                current_page = batch_end + 1
+            
+            if not self.should_stop:
+                self.batch_completed.emit(self.all_coordinates)
+                
+        except Exception as e:
+            self.error_occurred.emit(f"Batch extraction error: {str(e)}")
+    
+    def stop(self):
+        """Stop the extraction process."""
+        self.should_stop = True
+    
+    def _extract_coordinates_for_page(self, tables: list, page_num: int) -> list:
+        """Extract coordinates from tables for a specific page."""
+        coordinates = []
+        
+        # Initialize global ID counter if not exists
+        if not hasattr(self, '_global_id_counter'):
+            self._global_id_counter = 1000  # Start with high number to avoid conflicts with user IDs
+        
+        for i, table in enumerate(tables):
+            try:
+                bbox = table._bbox
+                
+                coordinate = {
+                    'id': self._global_id_counter,
+                    'page': page_num - 1,  # Convert to 0-based indexing
+                    'x1': float(bbox[0]),
+                    'y1': float(bbox[1]),
+                    'x2': float(bbox[2]),
+                    'y2': float(bbox[3]),
+                    'width': float(bbox[2] - bbox[0]),
+                    'height': float(bbox[3] - bbox[1]),
+                    'accuracy': getattr(table, 'accuracy', 0.0),
+                    'whitespace': getattr(table, 'whitespace', 0.0),
+                    'user_created': False
+                }
+                
+                coordinates.append(coordinate)
+                self._global_id_counter += 1
+                
+            except Exception as e:
+                print(f"Error extracting coordinate from table {i} on page {page_num}: {e}")
+        
+        return coordinates
+
+
 class MainWindow(QMainWindow):
     """Main application window."""
     
@@ -77,7 +199,9 @@ class MainWindow(QMainWindow):
         self.current_session: Optional[TableExtractionSession] = None
         self.extraction_worker: Optional[ExtractionWorker] = None
         self.batch_worker: Optional[BatchExtractionWorker] = None
+        self.custom_batch_worker: Optional[BatchExtractionWorkerCustom] = None
         self.all_extracted_coordinates = []  # Store all coordinates as they're extracted
+        self.total_pages = 0  # Store total pages in current PDF
         
         # UI Components
         self.viewer = None
@@ -162,8 +286,12 @@ class MainWindow(QMainWindow):
         # Extract menu
         extract_menu = menubar.addMenu('Extract')
         
+        extract_range_action = QAction('Extract Selected Range', self)
+        extract_range_action.triggered.connect(self.extract_tables_with_range)
+        extract_menu.addAction(extract_range_action)
+        
         extract_all_action = QAction('Extract All Pages', self)
-        extract_all_action.triggered.connect(self.extract_all_pages)
+        extract_all_action.triggered.connect(self.extract_all_pages_batch)
         extract_menu.addAction(extract_all_action)
         
         extract_current_action = QAction('Extract Current Page', self)
@@ -200,9 +328,42 @@ class MainWindow(QMainWindow):
         
         toolbar.addSeparator()
         
+        # Page Range Selection Group
+        page_range_group = QGroupBox("Page Range")
+        page_range_layout = QHBoxLayout()
+        
+        # All pages checkbox
+        self.all_pages_checkbox = QCheckBox("All Pages")
+        self.all_pages_checkbox.setChecked(True)
+        self.all_pages_checkbox.toggled.connect(self.on_all_pages_toggled)
+        page_range_layout.addWidget(self.all_pages_checkbox)
+        
+        # Start page
+        page_range_layout.addWidget(QLabel("From:"))
+        self.start_page_input = QSpinBox()
+        self.start_page_input.setMinimum(1)
+        self.start_page_input.setMaximum(9999)
+        self.start_page_input.setValue(1)
+        self.start_page_input.setEnabled(False)
+        page_range_layout.addWidget(self.start_page_input)
+        
+        # End page
+        page_range_layout.addWidget(QLabel("To:"))
+        self.end_page_input = QSpinBox()
+        self.end_page_input.setMinimum(1)
+        self.end_page_input.setMaximum(9999)
+        self.end_page_input.setValue(1)
+        self.end_page_input.setEnabled(False)
+        page_range_layout.addWidget(self.end_page_input)
+        
+        page_range_group.setLayout(page_range_layout)
+        toolbar.addWidget(page_range_group)
+        
+        toolbar.addSeparator()
+        
         # Extract tables with batch processing
-        self.extract_button = QPushButton("Extract Tables (Batch)")
-        self.extract_button.clicked.connect(self.extract_all_pages_batch)
+        self.extract_button = QPushButton("Extract Tables")
+        self.extract_button.clicked.connect(self.extract_tables_with_range)
         self.extract_button.setEnabled(False)
         toolbar.addWidget(self.extract_button)
         
@@ -286,6 +447,7 @@ class MainWindow(QMainWindow):
                 
                 # Create new session
                 page_count = get_pdf_page_count(pdf_path)
+                self.total_pages = page_count
                 pdf_doc = PDFDocument(
                     file_path=pdf_path,
                     page_count=page_count,
@@ -293,6 +455,11 @@ class MainWindow(QMainWindow):
                 )
                 
                 self.current_session = TableExtractionSession(pdf_document=pdf_doc)
+                
+                # Update page range controls
+                self.end_page_input.setMaximum(page_count)
+                self.end_page_input.setValue(page_count)
+                self.start_page_input.setMaximum(page_count)
                 
                 # Clear previous coordinates
                 self.coordinates_manager.clear_all()
@@ -305,6 +472,98 @@ class MainWindow(QMainWindow):
                 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error loading PDF: {str(e)}")
+    
+    def on_all_pages_toggled(self, checked: bool):
+        """Handle toggling of 'All Pages' checkbox."""
+        self.start_page_input.setEnabled(not checked)
+        self.end_page_input.setEnabled(not checked)
+        
+        if checked and self.total_pages > 0:
+            self.start_page_input.setValue(1)
+            self.end_page_input.setValue(self.total_pages)
+    
+    def get_page_range(self) -> tuple:
+        """Get the selected page range."""
+        if self.all_pages_checkbox.isChecked():
+            return (1, self.total_pages if self.total_pages > 0 else 1)
+        else:
+            start_page = self.start_page_input.value()
+            end_page = self.end_page_input.value()
+            
+            # Validate range
+            if start_page > end_page:
+                start_page, end_page = end_page, start_page
+                self.start_page_input.setValue(start_page)
+                self.end_page_input.setValue(end_page)
+            
+            # Ensure we don't exceed total pages
+            if self.total_pages > 0:
+                end_page = min(end_page, self.total_pages)
+                self.end_page_input.setValue(end_page)
+            
+            return (start_page, end_page)
+    
+    def extract_tables_with_range(self):
+        """Extract tables from selected page range."""
+        if not self.current_pdf_path:
+            QMessageBox.warning(self, "Warning", "Please open a PDF file first.")
+            return
+        
+        start_page, end_page = self.get_page_range()
+        
+        # Confirm if user selected a large range
+        pages_count = end_page - start_page + 1
+        if pages_count > 50:
+            reply = QMessageBox.question(
+                self, 
+                "Large Page Range", 
+                f"You've selected {pages_count} pages for extraction. This may take a while. Continue?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
+        
+        self.start_custom_batch_extraction(start_page, end_page)
+    
+    def start_custom_batch_extraction(self, start_page: int, end_page: int):
+        """Start custom batch extraction for specified page range."""
+        if self.custom_batch_worker and self.custom_batch_worker.isRunning():
+            QMessageBox.information(self, "Info", "Extraction already in progress.")
+            return
+        
+        # Reset coordinates
+        self.all_extracted_coordinates = []
+        
+        # Create custom batch worker
+        batch_size = self.batch_size_spinbox.value()
+        self.custom_batch_worker = BatchExtractionWorkerCustom(
+            self.current_pdf_path, batch_size, start_page, end_page
+        )
+        
+        # Connect signals
+        self.custom_batch_worker.page_completed.connect(self.on_page_extraction_completed)
+        self.custom_batch_worker.batch_completed.connect(self.on_batch_extraction_completed)
+        self.custom_batch_worker.progress_updated.connect(self.on_custom_batch_progress_updated)
+        self.custom_batch_worker.error_occurred.connect(self.on_batch_extraction_error)
+        
+        # Update UI
+        self.extract_button.setEnabled(False)
+        self.stop_button.setVisible(True)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 100)  # Determinate progress
+        
+        # Start extraction
+        self.custom_batch_worker.start()
+        pages_count = end_page - start_page + 1
+        self.status_bar.showMessage(f"Starting extraction for pages {start_page}-{end_page} ({pages_count} pages)...")
+    
+    def on_custom_batch_progress_updated(self, processed_pages: int, total_pages: int):
+        """Handle progress updates during custom batch extraction."""
+        progress = int((processed_pages / total_pages) * 100)
+        self.progress_bar.setValue(progress)
+        start_page, end_page = self.get_page_range()
+        current_page = start_page + processed_pages - 1
+        self.status_bar.showMessage(f"Processing page {current_page} of {start_page}-{end_page} range...")
     
     def extract_all_pages(self):
         """Extract tables from all pages using traditional method."""
@@ -353,6 +612,10 @@ class MainWindow(QMainWindow):
     
     def stop_extraction(self):
         """Stop the current extraction process."""
+        if self.custom_batch_worker and self.custom_batch_worker.isRunning():
+            self.custom_batch_worker.stop()
+            self.custom_batch_worker.wait()
+        
         if self.batch_worker and self.batch_worker.isRunning():
             self.batch_worker.stop()
             self.batch_worker.wait()
@@ -470,7 +733,16 @@ class MainWindow(QMainWindow):
         # Show completion message
         total_tables = len(all_coordinates)
         user_tables = len(existing_user_coords)
-        message = f"Batch extraction complete! Found {total_tables} tables across all pages."
+        
+        # Get page range information
+        if hasattr(self, 'custom_batch_worker') and self.custom_batch_worker:
+            start_page = self.custom_batch_worker.start_page
+            end_page = self.custom_batch_worker.end_page
+            pages_info = f" (pages {start_page}-{end_page})"
+        else:
+            pages_info = " across all pages"
+        
+        message = f"Batch extraction complete! Found {total_tables} tables{pages_info}."
         if user_tables > 0:
             message += f" (preserved {user_tables} user-created tables)"
         
@@ -479,7 +751,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self, 
             "Extraction Complete", 
-            f"Batch extraction completed successfully!\n\nFound {total_tables} tables across all pages.\n" +
+            f"Batch extraction completed successfully!\n\nFound {total_tables} tables{pages_info}.\n" +
             (f"Preserved {user_tables} user-created tables.\n\n" if user_tables > 0 else "\n") +
             "You can now review and edit the table boundaries before exporting."
         )
@@ -704,14 +976,37 @@ class MainWindow(QMainWindow):
     
     def export_table_images(self):
         """Export all table regions as images."""
-        if not self.current_pdf_path or not self.coordinates_manager.get_all_coordinates():
+        # Get all coordinates from both the manager and the extracted coordinates
+        manager_coords = self.coordinates_manager.get_all_coordinates()
+        extracted_coords = self.all_extracted_coordinates or []
+        
+        # Merge coordinates, avoiding duplicates
+        all_coords = []
+        coord_ids = set()
+        
+        # First, add all coordinates from the manager (includes user-created ones)
+        for coord in manager_coords:
+            coord_id = coord.get('id')
+            if coord_id is not None and coord_id not in coord_ids:
+                all_coords.append(coord)
+                coord_ids.add(coord_id)
+        
+        # Then add extracted coordinates that aren't already included
+        for coord in extracted_coords:
+            coord_id = coord.get('id')
+            if coord_id is not None and coord_id not in coord_ids:
+                all_coords.append(coord)
+                coord_ids.add(coord_id)
+        
+        if not self.current_pdf_path or not all_coords:
             QMessageBox.warning(self, "Warning", 
                               "Please load a PDF and extract tables first.")
             return
         
         # Choose export directory
         export_dir = QFileDialog.getExistingDirectory(
-            self, "Choose Export Directory"
+            self, "Choose Export Directory", 
+            os.path.join(os.path.dirname(self.current_pdf_path or "."), "table_exports")
         )
         
         if not export_dir:
@@ -723,24 +1018,37 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Error", "Failed to load PDF for rendering.")
                 return
             
-            # Get coordinates
-            coordinates = self.coordinates_manager.get_all_coordinates()
+            # Show export info
+            user_created = len([c for c in all_coords if c.get('user_created', False)])
+            auto_detected = len(all_coords) - user_created
+            
+            QMessageBox.information(
+                self, "Export Starting", 
+                f"Exporting {len(all_coords)} tables:\n"
+                f"• {auto_detected} auto-detected tables\n"
+                f"• {user_created} user-created tables\n\n"
+                f"Export directory: {export_dir}"
+            )
             
             # Export
             exported_files = self.renderer.export_all_tables(
-                coordinates, export_dir, "table", "PNG"
+                all_coords, export_dir, "table", "PNG"
             )
             
             if exported_files:
                 QMessageBox.information(
                     self, "Export Complete", 
-                    f"Exported {len(exported_files)} table images to:\n{export_dir}"
+                    f"Successfully exported {len(exported_files)} table images to:\n{export_dir}\n\n"
+                    f"Files created:\n" + "\n".join([os.path.basename(f) for f in exported_files[:5]]) +
+                    (f"\n... and {len(exported_files) - 5} more files" if len(exported_files) > 5 else "")
                 )
             else:
-                QMessageBox.warning(self, "Export Failed", "No images were exported.")
+                QMessageBox.warning(self, "Export Failed", "No images were exported. Please check the console for error details.")
                 
         except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Error exporting images: {str(e)}")
+            import traceback
+            print(f"Export error traceback: {traceback.format_exc()}")
     
     def export_coordinates(self):
         """Export coordinates to file."""

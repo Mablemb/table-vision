@@ -28,7 +28,7 @@ class TableRenderer:
     def render_table_region(self, page_num: int, bbox: Tuple[float, float, float, float], 
                            dpi: int = None) -> Optional[Image.Image]:
         """
-        Render a specific table region as an image.
+        Render a specific table region as an image using the same coordinate system as visualization.
         
         Args:
             page_num: Page number (0-based)
@@ -39,32 +39,137 @@ class TableRenderer:
             PIL Image of the table region or None if rendering fails
         """
         if not self.pdf_document:
+            print(f"      ERROR: No PDF document loaded")
             return None
         
         if dpi is None:
             dpi = self.export_dpi
         
         try:
+            print(f"      Accessing page {page_num} (total pages: {len(self.pdf_document)})")
+            
+            if page_num >= len(self.pdf_document) or page_num < 0:
+                print(f"      ERROR: Invalid page number {page_num}")
+                return None
+                
             page = self.pdf_document[page_num]
+            print(f"      Page dimensions: {page.rect}")
+            print(f"      Original bbox: {bbox}")
+            
+            # Extract coordinates
+            x1, y1, x2, y2 = bbox
+            
+            # Normalize bbox coordinates (ensure x1 < x2, y1 < y2)
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+            
+            # Use the SAME coordinate system as the working visualization:
+            # The visualization treats Camelot coordinates as bottom-origin and flips Y-axis
+            # We need to do the same transformation for export to match
+            print(f"      Using visualization coordinate system (Y-axis flipping)")
+            
+            # Apply the same Y-axis flip as the visualization
+            page_width = page.rect.width
+            page_height = page.rect.height
+            
+            # Flip Y coordinates: (bottom-origin) -> (top-origin)  
+            visual_y1 = page_height - y2  # PDF top becomes visual top
+            visual_y2 = page_height - y1  # PDF bottom becomes visual bottom
+            
+            print(f"      Original PDF coords: x1={x1}, y1={y1}, x2={x2}, y2={y2}")
+            print(f"      After Y-flip: x1={x1}, y1={visual_y1}, x2={x2}, y2={visual_y2}")
+            
+            # Use the flipped coordinates
+            x1, y1, x2, y2 = x1, visual_y1, x2, visual_y2
+            print(f"      Using visualization coordinate system (Y-axis flipping)")
+            
+            # Ensure coordinates are within page bounds
+            page_width = page.rect.width
+            page_height = page.rect.height
+            
+            x1 = max(0, min(x1, page_width))
+            x2 = max(x1, min(x2, page_width))
+            y1 = max(0, min(y1, page_height))
+            y2 = max(y1, min(y2, page_height))
+            
+            adjusted_bbox = (x1, y1, x2, y2)
+            print(f"      Bounds-checked bbox: {adjusted_bbox}")
+            
+            # Validate bbox has reasonable dimensions
+            width = x2 - x1
+            height = y2 - y1
+            if width < 10 or height < 10:
+                print(f"      ERROR: Bbox too small: {width}x{height}")
+                return None
+            
+            # Use full-page rendering with cropping approach to avoid PyMuPDF clipping issues
+            print(f"      Using full-page render + PIL crop approach")
             
             # Create transformation matrix for the desired DPI
             mat = fitz.Matrix(dpi / 72, dpi / 72)
+            print(f"      Transformation matrix: {mat} (scale: {dpi/72:.2f})")
             
-            # Convert bbox to the new coordinate system
-            rect = fitz.Rect(bbox[0], bbox[1], bbox[2], bbox[3])
-            rect = rect * mat
+            # Render full page at desired DPI
+            full_pix = page.get_pixmap(matrix=mat)
+            print(f"      Full page pixmap: {full_pix.width}x{full_pix.height}")
             
-            # Render the specific region
-            pix = page.get_pixmap(matrix=mat, clip=rect)
+            if full_pix.width == 0 or full_pix.height == 0:
+                print(f"      ERROR: Full page pixmap has zero dimensions")
+                return None
             
             # Convert to PIL Image
-            img_data = pix.tobytes("ppm")
-            img = Image.open(io.BytesIO(img_data))
+            img_data = full_pix.tobytes("ppm")
+            full_img = Image.open(io.BytesIO(img_data))
+            print(f"      Full page PIL image: {full_img.size}")
             
-            return img
+            # Calculate crop coordinates in the scaled image space
+            scale = dpi / 72
+            crop_x1 = int(x1 * scale)
+            crop_y1 = int(y1 * scale)  # No Y-axis flipping - top-origin
+            crop_x2 = int(x2 * scale)
+            crop_y2 = int(y2 * scale)  # No Y-axis flipping - top-origin
+            
+            print(f"      Scale factor: {scale}")
+            print(f"      Before padding - X: {crop_x1} to {crop_x2} (width: {crop_x2-crop_x1})")
+            print(f"      Before padding - Y: {crop_y1} to {crop_y2} (height: {crop_y2-crop_y1})")
+            
+            # Add padding
+            padding = max(3, int(dpi / 100))
+            crop_x1 = max(0, crop_x1 - padding)
+            crop_y1 = max(0, crop_y1 - padding)
+            crop_x2 = min(full_img.width, crop_x2 + padding)
+            crop_y2 = min(full_img.height, crop_y2 + padding)
+            
+            print(f"      After padding (+{padding}px) - X: {crop_x1} to {crop_x2} (width: {crop_x2-crop_x1})")
+            print(f"      After padding (+{padding}px) - Y: {crop_y1} to {crop_y2} (height: {crop_y2-crop_y1})")
+            
+            crop_box = (crop_x1, crop_y1, crop_x2, crop_y2)
+            print(f"      Crop box (with {padding}px padding): {crop_box}")
+            
+            # Expected dimensions
+            expected_width = crop_x2 - crop_x1
+            expected_height = crop_y2 - crop_y1
+            print(f"      Expected crop dimensions: {expected_width}x{expected_height}")
+            print(f"      Expected aspect ratio: {'landscape' if expected_width > expected_height else 'portrait'}")
+            
+            # Validate crop box
+            if (crop_x2 <= crop_x1 or crop_y2 <= crop_y1 or 
+                crop_x1 < 0 or crop_y1 < 0 or
+                crop_x2 > full_img.width or crop_y2 > full_img.height):
+                print(f"      ERROR: Invalid crop box for image size {full_img.size}")
+                return None
+            
+            # Crop the image
+            cropped_img = full_img.crop(crop_box)
+            print(f"      Cropped image: {cropped_img.size}")
+            print(f"      Actual aspect ratio: {'landscape' if cropped_img.width > cropped_img.height else 'portrait'}")
+            
+            return cropped_img
             
         except Exception as e:
-            print(f"Error rendering table region: {e}")
+            print(f"      ERROR: Exception in render_table_region: {e}")
+            import traceback
+            print(f"      Traceback: {traceback.format_exc()}")
             return None
     
     def export_table_as_image(self, page_num: int, bbox: Tuple[float, float, float, float], 
@@ -82,22 +187,28 @@ class TableRenderer:
         Returns:
             True if export successful, False otherwise
         """
+        print(f"    Rendering table region: page {page_num}, bbox {bbox}")
         img = self.render_table_region(page_num, bbox, dpi)
         if img is None:
+            print(f"    ERROR: Failed to render table region")
             return False
         
         try:
             # Ensure output directory exists
             output_dir = os.path.dirname(output_path)
             if output_dir and not ensure_directory_exists(output_dir):
+                print(f"    ERROR: Failed to create directory {output_dir}")
                 return False
             
             # Save the image
             img.save(output_path, format=format, dpi=(dpi or self.export_dpi, dpi or self.export_dpi))
+            print(f"    Image saved successfully: {output_path} ({img.size[0]}x{img.size[1]})")
             return True
             
         except Exception as e:
-            print(f"Error saving table image: {e}")
+            print(f"    ERROR: Failed to save image: {e}")
+            import traceback
+            print(f"    Traceback: {traceback.format_exc()}")
             return False
     
     def export_all_tables(self, coordinates: List[Dict], output_dir: str, 
@@ -115,12 +226,15 @@ class TableRenderer:
             List of successfully exported file paths
         """
         if not self.pdf_document:
+            print("ERROR: No PDF document loaded for export")
             return []
         
         # Ensure output directory exists
         if not ensure_directory_exists(output_dir):
+            print(f"ERROR: Failed to create output directory: {output_dir}")
             return []
         
+        print(f"Starting export of {len(coordinates)} tables to {output_dir}")
         exported_files = []
         
         for i, coord in enumerate(coordinates):
@@ -131,22 +245,29 @@ class TableRenderer:
                 user_created = coord.get('user_created', False)
                 
                 suffix = '_user' if user_created else '_auto'
-                filename = f"{filename_prefix}_{coord_id}_page{page_num}{suffix}.{format.lower()}"
+                filename = f"{filename_prefix}_{coord_id}_page{page_num + 1}{suffix}.{format.lower()}"
                 output_path = os.path.join(output_dir, filename)
                 
                 # Extract bbox
                 bbox = (coord['x1'], coord['y1'], coord['x2'], coord['y2'])
                 
+                print(f"Exporting table {coord_id} from page {page_num + 1} (0-based: {page_num})")
+                print(f"  Bbox: {bbox}")
+                print(f"  Output: {output_path}")
+                
                 # Export the table
                 if self.export_table_as_image(page_num, bbox, output_path, format):
                     exported_files.append(output_path)
-                    print(f"Exported: {output_path}")
+                    print(f"  ✓ Successfully exported: {filename}")
                 else:
-                    print(f"Failed to export table {coord_id}")
+                    print(f"  ✗ Failed to export table {coord_id}")
                     
             except Exception as e:
-                print(f"Error exporting table {coord.get('id', i)}: {e}")
+                print(f"ERROR: Exception exporting table {coord.get('id', i)}: {e}")
+                import traceback
+                print(f"Traceback: {traceback.format_exc()}")
         
+        print(f"Export complete. {len(exported_files)} out of {len(coordinates)} tables exported successfully.")
         return exported_files
     
     def export_tables_by_page(self, coordinates: List[Dict], output_dir: str, 

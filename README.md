@@ -10,7 +10,8 @@ Table Vision is a comprehensive Python application designed to extract, visualiz
 ## ✨ Features
 
 - **🔍 Automatic Table Detection**: Uses Camelot's lattice method to automatically detect tables in PDF documents
-- **📊 Interactive Visualization**: Display PDF pages with overlaid table outlines that can be selected and modified
+- **� Page Range Selection**: Extract tables from specific page ranges (start and end pages) for targeted analysis
+- **�📊 Interactive Visualization**: Display PDF pages with overlaid table outlines that can be selected and modified
 - **✏️ Real-time Boundary Editing**: Adjust, resize, move, and delete automatically detected table boundaries
 - **➕ Manual Table Creation**: Create new table boundaries for tables missed by automatic detection
 - **🖼️ High-Quality Image Export**: Export individual table regions as PNG, JPEG, or TIFF images
@@ -63,10 +64,13 @@ Table Vision is a comprehensive Python application designed to extract, visualiz
 ### Basic Usage
 
 1. **Load a PDF**: Click "Open PDF" or use `Ctrl+O`
-2. **Extract Tables**: Click "Extract Tables" - red rectangles will appear over detected tables
-3. **Edit Boundaries**: Click and drag rectangles to resize or reposition
-4. **Create New Tables**: Draw new rectangles for missed tables
-5. **Export**: Click "Export Images" to save table regions as images
+2. **Select Page Range**: 
+   - Check "All Pages" to process the entire document
+   - Uncheck "All Pages" and set "From" and "To" values to process specific pages
+3. **Extract Tables**: Click "Extract Tables" - red rectangles will appear over detected tables
+4. **Edit Boundaries**: Click and drag rectangles to resize or reposition
+5. **Create New Tables**: Draw new rectangles for missed tables
+6. **Export**: Click "Export Images" to save table regions as images
 
 ## 🎯 Use Cases
 
@@ -80,7 +84,23 @@ This tool is perfect for:
 
 ## 🆕 Recent Updates
 
-### Version 2.1.0 (Latest)
+### Version 2.3.0 (Latest)
+- **🎯 Fixed Table Export Coordinate System**: Resolved critical issue where exported images didn't match red rectangle positions
+- **📐 Correct Aspect Ratios**: Landscape tables now export as landscape images with proper orientation
+- **🖼️ Improved Image Quality**: Export now uses full-page render + PIL crop approach for better reliability
+- **📄 Enhanced Page Range Feature**: Streamlined page range selection with better validation and error handling
+- **🔧 Coordinate System Integration**: Export images now precisely match the visualization rectangles
+- **🐛 PyMuPDF Clipping Fix**: Resolved high-DPI clipping issues that caused dimension swapping
+- **📊 Better Debug Output**: Enhanced troubleshooting with detailed coordinate transformation logging
+
+### Version 2.2.0
+- **📄 Page Range Selection**: Added ability to extract tables from specific page ranges instead of processing entire documents
+- **⚡ Improved Processing Efficiency**: Users can now select start and end pages for targeted extraction, reducing processing time
+- **🎯 Better Testing Workflow**: Easy system testing with selective page processing
+- **🔧 Enhanced UI Controls**: Added intuitive page range controls in the toolbar with validation
+- **📈 Smart Progress Tracking**: Progress indicators now show current page within selected range
+
+### Version 2.1.0
 - **🐛 Fixed Critical Coordinate Bug**: Resolved issue where Camelot-detected tables were not displaying visually
 - **⚡ Improved Coordinate Transformation**: Complete rewrite of PDF-to-screen coordinate conversion system
 - **🎨 Enhanced Visual Display**: Table rectangles now appear correctly at proper screen positions
@@ -133,8 +153,8 @@ table-vision/
 
 #### 2. Table Detection
 - **Automatic Detection**: Camelot lattice method detects table structures
+- **Page Range Selection**: Choose to process all pages or specify a range (e.g., pages 5-15)
 - **Quality Settings**: Choose from Fast, Balanced, High Quality, or Maximum presets
-- **Page Selection**: Extract from all pages or specific page ranges
 - **Real-time Preview**: See detection results immediately
 
 #### 3. Interactive Editing
