@@ -10,9 +10,10 @@ Table Vision is a comprehensive Python application designed to extract, visualiz
 ## ✨ Features
 
 - **🔍 Automatic Table Detection**: Uses Camelot's lattice method to automatically detect tables in PDF documents
-- **� Page Range Selection**: Extract tables from specific page ranges (start and end pages) for targeted analysis
-- **�📊 Interactive Visualization**: Display PDF pages with overlaid table outlines that can be selected and modified
+- **📄 Page Range Selection**: Extract tables from specific page ranges (start and end pages) for targeted analysis
+- **📊 Interactive Visualization**: Display PDF pages with overlaid table outlines that can be selected and modified
 - **✏️ Real-time Boundary Editing**: Adjust, resize, move, and delete automatically detected table boundaries
+- **🗑️ Seamless Table Deletion**: Delete unwanted tables instantly during extraction - works throughout batch processing
 - **➕ Manual Table Creation**: Create new table boundaries for tables missed by automatic detection
 - **🖼️ High-Quality Image Export**: Export individual table regions as PNG, JPEG, or TIFF images
 - **💾 Session Management**: Save and load extraction sessions with all coordinate data
@@ -69,8 +70,11 @@ Table Vision is a comprehensive Python application designed to extract, visualiz
    - Uncheck "All Pages" and set "From" and "To" values to process specific pages
 3. **Extract Tables**: Click "Extract Tables" - red rectangles will appear over detected tables
 4. **Edit Boundaries**: Click and drag rectangles to resize or reposition
-5. **Create New Tables**: Draw new rectangles for missed tables
-6. **Export**: Click "Export Images" to save table regions as images
+5. **Delete Unwanted Tables**: Right-click or select and press Delete to remove incorrect detections
+6. **Create New Tables**: Draw new rectangles for missed tables
+7. **Export**: Click "Export Images" to save table regions as images
+
+> **✨ New in v2.3.1**: Table deletion now works seamlessly during batch extraction! You can delete unwanted tables immediately as they're detected, without waiting for the entire process to complete.
 
 ## 🎯 Use Cases
 
@@ -84,7 +88,17 @@ This tool is perfect for:
 
 ## 🆕 Recent Updates
 
-### Version 2.3.0 (Latest)
+### Version 2.3.1 (Latest) - Critical Bug Fix Release
+- **🗑️ Fixed Table Deletion Bug**: Resolved critical issue where detected tables displayed in the right panel couldn't be deleted
+- **⚡ Real-time Deletion**: Table deletion now works immediately throughout batch extraction process, not just at the end
+- **🔄 Improved Coordinate Management**: Fixed coordinate synchronization between internal data structures
+- **📊 Enhanced Batch Processing**: Batch extraction now properly accumulates coordinates without refreshing existing ones
+- **🎯 Consistent Behavior**: Unified deletion functionality across all extraction methods (regular and batch)
+- **🧪 Comprehensive Testing**: Added extensive test suite with 13+ automated tests covering all deletion scenarios
+- **🐛 Data Persistence**: Deleted coordinates no longer reappear due to coordinate list merging issues
+- **💻 Better User Experience**: Smooth, uninterrupted workflow for table review and curation during extraction
+
+### Version 2.3.0
 - **🎯 Fixed Table Export Coordinate System**: Resolved critical issue where exported images didn't match red rectangle positions
 - **📐 Correct Aspect Ratios**: Landscape tables now export as landscape images with proper orientation
 - **🖼️ Improved Image Quality**: Export now uses full-page render + PIL crop approach for better reliability
@@ -109,6 +123,14 @@ This tool is perfect for:
 - **🧹 Code Quality**: Added comprehensive debug logging and error handling
 
 ### Key Bug Fixes
+
+#### Version 2.3.1 (Latest)
+- **Critical Table Deletion Bug**: Fixed issue where tables in the right panel couldn't be deleted
+- **Batch Processing Accumulation**: Resolved coordinates refreshing instead of properly accumulating during batch extraction
+- **Data Structure Synchronization**: Fixed inconsistencies between coordinate manager and extracted coordinates list
+- **Real-time Deletion**: Deletion now works immediately during batch processing, not just at completion
+
+#### Previous Versions
 - Fixed double-scaling in coordinate transformations that caused rectangles to appear off-screen
 - Corrected Y-axis flipping between PDF (bottom-origin) and screen (top-origin) coordinate systems  
 - Resolved scale factor calculation errors that affected rectangle positioning

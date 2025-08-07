@@ -632,26 +632,62 @@ class MainWindow(QMainWindow):
     
     def on_page_extraction_completed(self, page_number: int, page_coordinates: list):
         """Handle completion of extraction for a single page."""
-        # Add new Camelot coordinates to our collection
-        # But preserve any existing user-created coordinates on this page
+        print(f"DEBUG - Page {page_number} extraction completed with {len(page_coordinates)} new coordinates")
         
-        # First, get existing user-created coordinates for this page
-        existing_user_coords = [
+        # Preserve existing user-created coordinates for this page from coordinates_manager
+        existing_user_coords_manager = [
+            coord for coord in self.coordinates_manager.get_all_coordinates()
+            if coord.get('page') == page_number and coord.get('user_created', False)
+        ]
+        
+        # Also preserve from all_extracted_coordinates (for consistency)
+        existing_user_coords_extracted = [
             coord for coord in self.all_extracted_coordinates 
             if coord.get('page') == page_number and coord.get('user_created', False)
         ]
         
-        # Remove all coordinates for this page from our main list
+        # Use the most complete set of user coordinates
+        existing_user_coords = existing_user_coords_manager if existing_user_coords_manager else existing_user_coords_extracted
+        
+        print(f"DEBUG - Preserving {len(existing_user_coords)} user-created coordinates for page {page_number}")
+        
+        # Remove all coordinates for this page from both data structures
         self.all_extracted_coordinates = [
             coord for coord in self.all_extracted_coordinates 
             if coord.get('page') != page_number
         ]
         
-        # Add the new Camelot coordinates
-        self.all_extracted_coordinates.extend(page_coordinates)
+        # Remove page coordinates from manager
+        coords_to_remove = [
+            coord['id'] for coord in self.coordinates_manager.get_all_coordinates()
+            if coord.get('page') == page_number
+        ]
+        for coord_id in coords_to_remove:
+            self.coordinates_manager.remove_coordinate(coord_id)
         
-        # Re-add the preserved user coordinates
-        self.all_extracted_coordinates.extend(existing_user_coords)
+        print(f"DEBUG - Removed {len(coords_to_remove)} old coordinates for page {page_number}")
+        
+        # Add new Camelot coordinates to both structures
+        for coord_data in page_coordinates:
+            # Add to manager first to get consistent ID
+            manager_id = self.coordinates_manager.add_coordinate(coord_data)
+            # Update the coordinate with the manager's ID
+            coord_data['id'] = manager_id
+            # Add to extracted list
+            self.all_extracted_coordinates.append(coord_data)
+        
+        # Re-add preserved user coordinates to both structures
+        for user_coord in existing_user_coords:
+            # Add to manager
+            manager_id = self.coordinates_manager.add_coordinate(user_coord)
+            # Update the coordinate with the manager's ID
+            user_coord['id'] = manager_id
+            # Add to extracted list
+            self.all_extracted_coordinates.append(user_coord)
+        
+        print(f"DEBUG - Added {len(page_coordinates)} new + {len(existing_user_coords)} preserved = {len(page_coordinates) + len(existing_user_coords)} coordinates")
+        print(f"DEBUG - Manager now has {len(self.coordinates_manager.get_all_coordinates())} total coordinates")
+        print(f"DEBUG - Extracted list now has {len(self.all_extracted_coordinates)} total coordinates")
         
         # Update viewer with current coordinates (incremental display)
         if self.viewer:
@@ -692,19 +728,26 @@ class MainWindow(QMainWindow):
     
     def on_batch_extraction_completed(self, all_coordinates: list):
         """Handle completion of batch extraction."""
-        # Preserve existing user-created coordinates
-        existing_user_coords = [
-            coord for coord in self.all_extracted_coordinates 
-            if coord.get('user_created', False)
-        ]
+        print(f"DEBUG - Batch extraction completed. Received {len(all_coordinates)} new coordinates")
+        print(f"DEBUG - Manager currently has {len(self.coordinates_manager.get_all_coordinates())} coordinates")
+        print(f"DEBUG - Extracted list currently has {len(self.all_extracted_coordinates)} coordinates")
         
-        # Replace with new Camelot coordinates
-        self.all_extracted_coordinates = all_coordinates
+        # Since we've been maintaining coordinates incrementally during page completion,
+        # we just need to validate synchronization and clean up the UI
         
-        # Re-add preserved user coordinates
-        self.all_extracted_coordinates.extend(existing_user_coords)
+        manager_count = len(self.coordinates_manager.get_all_coordinates())
+        extracted_count = len(self.all_extracted_coordinates)
         
-        # Final update
+        if manager_count != extracted_count:
+            print(f"WARNING - Coordinate count mismatch: manager={manager_count}, extracted={extracted_count}")
+            # In case of mismatch, trust the all_extracted_coordinates which should be complete
+            print("DEBUG - Resyncing coordinates_manager with all_extracted_coordinates")
+            self.coordinates_manager.clear_all()
+            for coord_data in self.all_extracted_coordinates:
+                new_id = self.coordinates_manager.add_coordinate(coord_data)
+                coord_data['id'] = new_id
+        
+        # Final update to UI components
         if self.viewer:
             viewer_coordinates = []
             for coord in self.all_extracted_coordinates:
@@ -731,8 +774,7 @@ class MainWindow(QMainWindow):
         self.export_button.setEnabled(True)
         
         # Show completion message
-        total_tables = len(all_coordinates)
-        user_tables = len(existing_user_coords)
+        total_tables = len(self.all_extracted_coordinates)
         
         # Get page range information
         if hasattr(self, 'custom_batch_worker') and self.custom_batch_worker:
@@ -743,16 +785,16 @@ class MainWindow(QMainWindow):
             pages_info = " across all pages"
         
         message = f"Batch extraction complete! Found {total_tables} tables{pages_info}."
-        if user_tables > 0:
-            message += f" (preserved {user_tables} user-created tables)"
         
         self.status_bar.showMessage(message)
+        
+        print(f"DEBUG - Final status: {message}")
+        print(f"DEBUG - Final counts - Manager: {len(self.coordinates_manager.get_all_coordinates())}, Extracted: {len(self.all_extracted_coordinates)}")
         
         QMessageBox.information(
             self, 
             "Extraction Complete", 
-            f"Batch extraction completed successfully!\n\nFound {total_tables} tables{pages_info}.\n" +
-            (f"Preserved {user_tables} user-created tables.\n\n" if user_tables > 0 else "\n") +
+            f"Batch extraction completed successfully!\n\nFound {total_tables} tables{pages_info}.\n\n" +
             "You can now review and edit the table boundaries before exporting."
         )
     
@@ -796,21 +838,26 @@ class MainWindow(QMainWindow):
     
     def on_extraction_finished(self, coordinates: list):
         """Handle extraction completion."""
-        # Clear existing coordinates
+        # Clear existing coordinates and update all_extracted_coordinates
         self.coordinates_manager.clear_all()
+        self.all_extracted_coordinates = []
         
-        # Add new coordinates
+        # Add new coordinates to both manager and extracted list
         for coord_data in coordinates:
             coord_id = self.coordinates_manager.add_coordinate(coord_data)
+            # Update the coordinate with the assigned ID
+            coord_data['id'] = coord_id
+            self.all_extracted_coordinates.append(coord_data)
         
         # Update session
         if self.current_session:
             # Convert to TableCoordinate objects
             from data.models import TableCoordinate
             for coord_data in coordinates:
-                coord_data['id'] = self.coordinates_manager.add_coordinate(coord_data)
                 table_coord = TableCoordinate.from_dict(coord_data)
                 self.current_session.add_coordinate(table_coord)
+        
+        print(f"DEBUG - Regular extraction completed: {len(coordinates)} coordinates added to both manager and extracted list")
         
         # Update UI
         self.update_coordinates_display()
@@ -848,11 +895,12 @@ class MainWindow(QMainWindow):
                 coord_ids.add(coord_id)
         
         # Then add extracted coordinates that aren't already included
-        for coord in self.all_extracted_coordinates:
-            coord_id = coord.get('id')
-            if coord_id is not None and coord_id not in coord_ids:
-                all_coords.append(coord)
-                coord_ids.add(coord_id)
+        if hasattr(self, 'all_extracted_coordinates') and self.all_extracted_coordinates:
+            for coord in self.all_extracted_coordinates:
+                coord_id = coord.get('id')
+                if coord_id is not None and coord_id not in coord_ids:
+                    all_coords.append(coord)
+                    coord_ids.add(coord_id)
         
         # Update viewer
         if self.viewer:
@@ -883,23 +931,9 @@ class MainWindow(QMainWindow):
             current_page, x1, y1, x2, y2
         )
         
-        # Also add to the main extracted coordinates list with proper ID
-        user_coord = {
-            'id': coord_id,
-            'page': current_page,
-            'x1': min(x1, x2),
-            'y1': min(y1, y2),
-            'x2': max(x1, x2),
-            'y2': max(y1, y2),
-            'width': abs(x2 - x1),
-            'height': abs(y2 - y1),
-            'user_created': True,
-            'accuracy': 100.0,
-            'whitespace': 0.0
-        }
-        
-        # Add to the all_extracted_coordinates list to ensure it persists
-        self.all_extracted_coordinates.append(user_coord)
+        # NOTE: User coordinates are only stored in coordinates_manager
+        # They don't need to be added to all_extracted_coordinates since
+        # update_coordinates_display() prioritizes coordinates_manager
         
         # Add to session
         if self.current_session:
@@ -934,12 +968,36 @@ class MainWindow(QMainWindow):
     
     def delete_coordinate(self, coord_id: int):
         """Delete a coordinate."""
+        print(f"DEBUG - Attempting to delete coordinate {coord_id}")
+        
         if self.coordinates_manager.remove_coordinate(coord_id):
+            print(f"DEBUG - Removed coordinate {coord_id} from coordinates_manager")
+            
             # Remove from session
             if self.current_session:
                 self.current_session.remove_coordinate(coord_id)
+                print(f"DEBUG - Removed coordinate {coord_id} from current_session")
+            
+            # Also remove from extracted coordinates list to prevent reappearing
+            if hasattr(self, 'all_extracted_coordinates') and self.all_extracted_coordinates:
+                original_count = len(self.all_extracted_coordinates)
+                self.all_extracted_coordinates = [
+                    coord for coord in self.all_extracted_coordinates 
+                    if coord.get('id') != coord_id
+                ]
+                new_count = len(self.all_extracted_coordinates)
+                
+                if original_count != new_count:
+                    print(f"DEBUG - Removed coordinate {coord_id} from all_extracted_coordinates ({original_count} -> {new_count})")
+                else:
+                    print(f"DEBUG - Coordinate {coord_id} was not found in all_extracted_coordinates")
+            else:
+                print(f"DEBUG - all_extracted_coordinates is empty or not initialized")
             
             self.update_coordinates_display()
+            print(f"DEBUG - Coordinate {coord_id} deletion complete")
+        else:
+            print(f"DEBUG - Failed to remove coordinate {coord_id} from coordinates_manager")
     
     def on_coordinate_selected(self, coord_id: int):
         """Handle coordinate selection."""

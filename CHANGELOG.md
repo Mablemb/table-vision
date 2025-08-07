@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2025-08-07
+
+### 🐛 Fixed
+- **Table Deletion Bug**: Fixed issue where detected tables displayed in the right panel couldn't be deleted
+- **Coordinate Persistence**: Deleted coordinates no longer reappear after deletion due to coordinate list merging issue
+- **Batch Extraction Inconsistency**: Fixed coordinates from batch extraction not being added to coordinate manager
+- **Duplicate Coordinate Storage**: Fixed coordinates being stored twice in coordinate manager during regular extraction
+- **Batch Accumulation Issue**: Fixed batch extraction refreshing coordinates instead of properly accumulating them
+- **Real-time Deletion**: Deletion now works throughout batch extraction process, not just at the end
+- **UI Responsiveness**: Delete operations now properly update both viewer and editor displays
+
+### 🔧 Technical
+- Modified `delete_coordinate()` method to remove coordinates from both `coordinates_manager` and `all_extracted_coordinates`
+- Enhanced `on_page_extraction_completed()` to maintain both data structures incrementally during batch processing
+- Simplified `on_batch_extraction_completed()` to focus on UI cleanup since coordinates are now maintained incrementally
+- Fixed `on_extraction_finished()` to prevent duplicate coordinate storage
+- Added comprehensive debug logging for coordinate management operations
+- Streamlined coordinate management for consistency between extraction methods
+- Added comprehensive debug logging for coordinate deletion tracking
+- Enhanced coordinate synchronization between different data sources
+
 ## [2.3.0] - 2025-08-07
 
 ### 🎯 Fixed
